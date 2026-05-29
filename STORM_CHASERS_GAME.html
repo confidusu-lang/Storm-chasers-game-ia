@@ -1,0 +1,1525 @@
+```html
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Cazadores de Tornados 3D - Interfaz Compacta</title>
+    <!-- Tailwind CSS para el diseño de la interfaz -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js para renderizado 3D -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+            background-color: #050508;
+            font-family: 'Courier New', Courier, monospace;
+        }
+        #gameCanvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        /* Efecto de estática en pantalla al estar cerca de un tornado */
+        .static-noise {
+            pointer-events: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: repeating-linear-gradient(
+                0deg,
+                rgba(0, 0, 0, 0.12),
+                rgba(0, 0, 0, 0.12) 1px,
+                transparent 1px,
+                transparent 2px
+            );
+            opacity: 0;
+            transition: opacity 0.2s;
+            z-index: 5;
+        }
+        /* Estilos para el radar "alado" horizontal compacto */
+        #radarContainer {
+            background: rgba(10, 20, 15, 0.9);
+            border: 1.5px solid #39ff14;
+            box-shadow: 0 0 15px rgba(57, 255, 20, 0.3);
+            clip-path: polygon(4% 0%, 96% 0%, 100% 100%, 0% 100%);
+        }
+        .hud-bar {
+            transition: width 0.1s ease;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Ruido estático de interferencia por tormenta -->
+    <div id="staticEffect" class="static-noise"></div>
+
+    <!-- Pantalla de Inicio / Menú -->
+    <div id="menuScreen" class="absolute inset-0 bg-slate-950/95 flex flex-col items-center justify-center z-50 p-6 text-center text-emerald-400">
+        <div class="max-w-2xl border-4 border-emerald-500/30 p-8 rounded-lg bg-slate-900/80 shadow-2xl backdrop-blur-md">
+            <h1 class="text-4xl md:text-5xl font-extrabold tracking-widest mb-2 text-emerald-300 uppercase animate-pulse">
+                Cazatornados 3D
+            </h1>
+            <p class="text-sm text-emerald-500/80 mb-6 italic">Mundo Abierto - Interfaz HUD Compacta</p>
+            
+            <div class="text-left bg-black/70 p-4 rounded border border-emerald-500/20 mb-6 space-y-2 text-xs md:text-sm">
+                <p class="text-emerald-300 font-bold">OPTIMIZACIÓN DE INTERFAZ:</p>
+                <p>• <span class="text-yellow-400 font-bold">Barra inferior compacta:</span> Se ha reducido el tamaño del radar para ofrecer una visibilidad mucho más amplia del horizonte tormentoso.</p>
+                <p>• <span class="text-emerald-300">Cámara libre:</span> Arrastra la pantalla con el ratón o desliza el dedo en el móvil para rotar la cámara a tu gusto.</p>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4 mb-6 text-xs text-left">
+                <div class="border border-emerald-500/20 p-2 rounded bg-slate-950/50">
+                    <span class="text-emerald-300 font-bold block mb-1">PC CONTROLES:</span>
+                    Mover: <span class="text-white">WASD / Flechas</span><br>
+                    Cámara: <span class="text-white">Clic Izq. y arrastrar</span><br>
+                    Sonda: <span class="text-white">ESPACIO</span>
+                </div>
+                <div class="border border-emerald-500/20 p-2 rounded bg-slate-950/50">
+                    <span class="text-emerald-300 font-bold block mb-1">MÓVIL CONTROLES:</span>
+                    Mover: <span class="text-white">Joystick Izquierdo</span><br>
+                    Cámara: <span class="text-white">Deslizar en lado derecho</span><br>
+                    Sonda: <span class="text-white">Botón Sonda (Radar)</span>
+                </div>
+            </div>
+
+            <button id="startBtn" class="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-black font-bold text-lg rounded-md tracking-wider transition-all border border-emerald-400 active:scale-95 shadow-lg shadow-emerald-500/20">
+                INICIAR TRANSMISIÓN
+            </button>
+        </div>
+    </div>
+
+    <!-- Pantalla de Fin de Juego -->
+    <div id="gameOverScreen" class="absolute inset-0 bg-red-950/95 flex flex-col items-center justify-center z-50 p-6 text-center text-red-500 hidden">
+        <div class="max-w-md border-4 border-red-500/30 p-8 rounded-lg bg-slate-950/90 shadow-2xl">
+            <h2 class="text-3xl md:text-5xl font-extrabold tracking-widest mb-4 text-red-400 animate-bounce">
+                UNIDAD COMPROMETIDA
+            </h2>
+            <p class="text-sm text-red-300 mb-6">El blindaje de tu coche de caza no soportó la presión centrípeta del vórtice.</p>
+            
+            <div class="bg-black/80 p-4 rounded border border-red-500/30 mb-6 text-left space-y-2">
+                <p class="text-xs text-slate-400">DATOS METEOROLÓGICOS:</p>
+                <p class="text-sm">Datos Totales: <span id="finalDatos" class="text-cyan-400 font-bold">0 GB</span></p>
+                <p class="text-sm">Mis Sondas Clavadas: <span id="finalSondas" class="text-yellow-400 font-bold">0</span></p>
+                <p class="text-sm">Sondas de la Flota: <span id="finalAliadas" class="text-emerald-400 font-bold">0</span></p>
+            </div>
+
+            <button id="restartBtn" class="w-full py-3 bg-red-600 hover:bg-red-500 text-white font-bold rounded-md tracking-wider transition-all border border-red-400 active:scale-95">
+                RECONSTRUIR Y REENTRAR
+            </button>
+        </div>
+    </div>
+
+    <!-- HUD Principal superior -->
+    <div id="gameHUD" class="absolute inset-x-0 top-0 p-3 flex justify-between items-start pointer-events-none z-10 text-emerald-400 select-none text-xs">
+        <!-- Telemetría Científica -->
+        <div class="bg-slate-950/85 border border-emerald-500/30 p-2 rounded shadow-md backdrop-blur-xs flex flex-col gap-1 min-w-[150px]">
+            <div class="text-[9px] text-emerald-500/60 font-semibold uppercase tracking-wider">Telemetría</div>
+            <div class="text-sm font-bold flex justify-between">
+                <span>Datos:</span>
+                <span id="dataScore" class="text-cyan-400">0 GB</span>
+            </div>
+            <div class="text-[10px] flex justify-between">
+                <span>Mis Sondas:</span>
+                <span id="probeCount" class="text-yellow-400 font-bold">0</span>
+            </div>
+            <div class="text-[10px] flex justify-between border-t border-emerald-500/20 pt-1 mt-0.5">
+                <span>Flota Aliada:</span>
+                <span id="alliesCount" class="text-emerald-300">8 Activos</span>
+            </div>
+        </div>
+
+        <!-- Indicador de Alerta de Proximidad -->
+        <div id="proximityAlert" class="hidden animate-pulse bg-red-950/90 border border-red-500 text-red-400 text-center px-3 py-1.5 rounded shadow-lg font-bold text-xs max-w-xs">
+            ⚠️ ¡VIENTOS EXTREMOS! <br><span class="text-[10px] font-normal text-white">Retrocede inmediatamente</span>
+        </div>
+
+        <!-- Integridad del Vehículo -->
+        <div class="bg-slate-950/85 border border-emerald-500/30 p-2 rounded shadow-md backdrop-blur-xs min-w-[160px] flex flex-col gap-1">
+            <div class="text-[9px] text-emerald-500/60 font-semibold uppercase tracking-wider">Unidad Blindada</div>
+            <div class="flex justify-between items-center text-[10px]">
+                <span class="font-bold">Estructura:</span>
+                <span id="healthPercentage" class="text-emerald-300 font-bold">100%</span>
+            </div>
+            <!-- Barra de Vida -->
+            <div class="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden border border-emerald-500/20">
+                <div id="healthBar" class="bg-gradient-to-r from-red-600 via-yellow-500 to-emerald-400 h-full w-full hud-bar"></div>
+            </div>
+            <div class="text-[10px] flex justify-between mt-0.5">
+                <span>Velocidad:</span>
+                <span id="speedDisplay" class="text-white font-bold">0 km/h</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- HUD Inferior: El Radar Alado Horizontal Rediseñado y Más Pequeño -->
+    <div class="absolute bottom-0 inset-x-0 flex justify-center p-1 z-20 pointer-events-none">
+        <div id="radarContainer" class="w-full max-w-[580px] h-[95px] rounded-t-lg flex items-stretch p-2 gap-2 pointer-events-auto">
+            
+            <!-- Ala Izquierda: Panel de Medidores (Presión de aire) - Compactado -->
+            <div class="flex-1 flex flex-col justify-between text-[9px] text-emerald-400 bg-black/60 p-1.5 rounded border border-emerald-500/10">
+                <div class="text-center font-bold border-b border-emerald-500/20 pb-0.5 text-emerald-300">TELEM-PRESION</div>
+                <div class="space-y-0.5 my-0.5">
+                    <div class="flex justify-between">
+                        <span>ESTÁTICA:</span>
+                        <span id="baroPress" class="font-bold">1013 hPa</span>
+                    </div>
+                    <div class="w-full bg-emerald-950/40 h-1 rounded-full overflow-hidden">
+                        <div id="baroBar" class="bg-cyan-500 h-full w-4/5 hud-bar"></div>
+                    </div>
+                    <div class="flex justify-between text-[8px]">
+                        <span>REF:</span>
+                        <span class="text-emerald-400 font-bold" id="rfdStatus">ESTABLE</span>
+                    </div>
+                </div>
+                <div class="text-[7px] text-emerald-500/40 text-center">GPS III CONNECTED</div>
+            </div>
+
+            <!-- Centro: El Radar Horizontal Circular de Barrido - Más Pequeño -->
+            <div class="relative w-[130px] h-[75px] self-center flex items-center justify-center bg-black/85 rounded border border-emerald-500/40 overflow-hidden shadow-inner">
+                <canvas id="radarCanvas" width="120" height="70" class="absolute"></canvas>
+                <!-- Retícula del Radar -->
+                <div class="absolute w-1.5 h-1.5 bg-yellow-400 rounded-full shadow-md shadow-yellow-500/50"></div>
+                <!-- Orientación de la cámara -->
+                <div id="cameraConeIndicator" class="absolute pointer-events-none w-full h-full flex items-center justify-center">
+                    <div class="w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-b-[9px] border-b-cyan-400/40 absolute -translate-y-4"></div>
+                </div>
+            </div>
+
+            <!-- Ala Derecha: Medidor de Velocidad de Vientos y Botón - Compactados -->
+            <div class="flex-1 flex flex-col justify-between text-[9px] text-emerald-400 bg-black/60 p-1.5 rounded border border-emerald-500/10">
+                <div class="space-y-0.5">
+                    <div class="flex justify-between leading-none">
+                        <span>VÓRTICE:</span>
+                        <span class="text-red-400 font-bold" id="fujitaScale">EF-0</span>
+                    </div>
+                    <div class="flex justify-between leading-none text-[8px]">
+                        <span>VIENTO:</span>
+                        <span id="windSpeed" class="text-white">22 km/h</span>
+                    </div>
+                    <div class="w-full bg-emerald-950/40 h-1 rounded-full overflow-hidden">
+                        <div id="windBar" class="bg-red-500 h-full w-1/5 hud-bar"></div>
+                    </div>
+                </div>
+                <!-- Botón de despliegue principal compacto -->
+                <button id="deployProbeBtn" class="w-full py-0.5 bg-yellow-500 hover:bg-yellow-400 text-black font-extrabold rounded text-[8px] tracking-wider transition-all active:scale-95">
+                    LANZAR SONDA
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Controles Táctiles Móviles Rediseñados -->
+    <div id="mobileControls" class="absolute bottom-16 inset-x-0 px-4 flex justify-between items-end pointer-events-none z-30 md:hidden">
+        <!-- Joystick para Dirección (Izquierda) -->
+        <div class="w-20 h-20 bg-slate-950/60 rounded-full border border-emerald-500/20 relative flex items-center justify-center pointer-events-auto shadow-lg backdrop-blur-xs" id="joystickZone">
+            <div class="w-7 h-7 bg-emerald-500 rounded-full absolute shadow-md active:bg-emerald-400 cursor-pointer" id="joystickKnob"></div>
+        </div>
+
+        <!-- Mensaje de orientación táctil -->
+        <div class="absolute inset-x-0 top-[-90px] h-[40px] pointer-events-none flex justify-center items-center">
+            <div class="text-[8px] text-white/30 bg-black/40 px-2 py-0.5 rounded-full border border-white/5 font-bold uppercase tracking-widest">
+                Desliza la pantalla para rotar cámara ↺
+            </div>
+        </div>
+
+        <!-- Pedales de Conducción Compactos -->
+        <div class="flex gap-1.5 pointer-events-auto">
+            <button id="btnBrake" class="w-11 h-11 bg-red-950/80 active:bg-red-800 border border-red-500/30 text-red-400 font-bold rounded text-[9px] flex flex-col items-center justify-center shadow-lg active:scale-95">
+                <span>R</span>
+            </button>
+            <button id="btnGas" class="w-13 h-13 bg-emerald-950/80 active:bg-emerald-800 border border-emerald-500/30 text-emerald-300 font-bold rounded flex flex-col items-center justify-center shadow-lg active:scale-95">
+                <span>GAS</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Canvas de Renderizado de Three.js -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- Generador de audio del navegador -->
+    <script>
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playBeep(freq, duration, type = 'sine') {
+            try {
+                if (audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.06, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration);
+            } catch (e) {}
+        }
+    </script>
+
+    <!-- Código de la simulación de tormentas -->
+    <script>
+        // CONFIGURACIÓN DE SISTEMAS Y THREE.JS
+        let scene, camera, renderer;
+        let clock = new THREE.Clock();
+        
+        let playerCar = {
+            mesh: null,
+            x: 0,
+            z: 0,
+            angle: 0,
+            speed: 0,
+            maxSpeed: 45,
+            acceleration: 30,
+            friction: 4,
+            steerSpeed: 2.2,
+            health: 100,
+            deployedProbes: 0,
+            dataScore: 0
+        };
+
+        // Órbita y rotación de la cámara libre
+        let cameraOrbit = {
+            theta: 0,
+            phi: 0.35,
+            radius: 13.5,
+            userActive: false,
+            resetTimer: 0
+        };
+
+        const WORLD_SIZE = 1000;
+        let tornadoes = [];
+        let aiCars = [];
+        let deployedProbes = [];
+        let debrisParticles;
+        let lightningFlashTime = 0;
+        let mainLight;
+        let gameActive = false;
+
+        let keys = { w: false, a: false, s: false, d: false, space: false };
+        let touchControls = { steerX: 0, isGassing: false, isBraking: false };
+
+        let isPointerDragging = false;
+        let prevPointerPosition = { x: 0, y: 0 };
+
+        // Elementos del DOM
+        const menuScreen = document.getElementById('menuScreen');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        const startBtn = document.getElementById('startBtn');
+        const restartBtn = document.getElementById('restartBtn');
+        const staticEffect = document.getElementById('staticEffect');
+        const dataScoreText = document.getElementById('dataScore');
+        const probeCountText = document.getElementById('probeCount');
+        const healthBar = document.getElementById('healthBar');
+        const healthPercentage = document.getElementById('healthPercentage');
+        const speedDisplay = document.getElementById('speedDisplay');
+        const proximityAlert = document.getElementById('proximityAlert');
+        const cameraConeIndicator = document.getElementById('cameraConeIndicator');
+        
+        // Elementos del Radar Compacto
+        const baroPress = document.getElementById('baroPress');
+        const baroBar = document.getElementById('baroBar');
+        const fujitaScale = document.getElementById('fujitaScale');
+        const windSpeedText = document.getElementById('windSpeed');
+        const windBar = document.getElementById('windBar');
+        const rfdStatusText = document.getElementById('rfdStatus');
+        const deployProbeBtn = document.getElementById('deployProbeBtn');
+        const radarCanvas = document.getElementById('radarCanvas');
+        const radarCtx = radarCanvas.getContext('2d');
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x07090c);
+            scene.fog = new THREE.FogExp2(0x0a0c12, 0.0075);
+
+            camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 1000);
+            
+            renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gameCanvas'), antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+
+            const ambientLight = new THREE.AmbientLight(0x151b26, 0.65);
+            scene.add(ambientLight);
+
+            mainLight = new THREE.DirectionalLight(0x7df9ff, 0.1);
+            mainLight.position.set(0, 150, 0);
+            scene.add(mainLight);
+
+            createTerrain();
+            generateWorldScenery();
+            createPlayer();
+            spawnTornadoes(4);
+            spawnAICars(8);
+            createDebrisSystem();
+
+            window.addEventListener('resize', onWindowResize);
+            setupInputListeners();
+            setupCameraDragListeners();
+
+            animate();
+        }
+
+        function createTerrain() {
+            const size = WORLD_SIZE;
+            const geo = new THREE.PlaneGeometry(size, size, 64, 64);
+            
+            const pos = geo.attributes.position;
+            for (let i = 0; i < pos.count; i++) {
+                const vx = pos.getX(i);
+                const vy = pos.getY(i);
+                const height = Math.sin(vx * 0.01) * Math.cos(vy * 0.01) * 3 + Math.sin(vx * 0.003) * 6;
+                pos.setZ(i, height);
+            }
+            geo.computeVertexNormals();
+
+            const mat = new THREE.MeshStandardMaterial({
+                color: 0x101318,
+                roughness: 0.95,
+                metalness: 0.05,
+                flatShading: true
+            });
+
+            const terrain = new THREE.Mesh(geo, mat);
+            terrain.rotation.x = -Math.PI / 2;
+            scene.add(terrain);
+
+            const gridHelper = new THREE.GridHelper(WORLD_SIZE, 80, 0x39ff14, 0x0c1a0c);
+            gridHelper.position.y = 0.12;
+            scene.add(gridHelper);
+        }
+
+        function generateWorldScenery() {
+            const numObjects = 160;
+            for (let i = 0; i < numObjects; i++) {
+                const rx = (Math.random() - 0.5) * (WORLD_SIZE - 120);
+                const rz = (Math.random() - 0.5) * (WORLD_SIZE - 120);
+                
+                if (Math.abs(rx) < 40 && Math.abs(rz) < 40) continue;
+
+                const type = Math.random();
+                if (type < 0.6) {
+                    createDryTree(rx, rz);
+                } else if (type < 0.85) {
+                    createPowerPole(rx, rz);
+                } else {
+                    createAbandonedBarn(rx, rz);
+                }
+            }
+        }
+
+        function createDryTree(x, z) {
+            const group = new THREE.Group();
+            const trunkGeo = new THREE.CylinderGeometry(0.15, 0.32, 4.8, 5);
+            const woodMat = new THREE.MeshStandardMaterial({ color: 0x18130f, roughness: 1.0 });
+            const trunk = new THREE.Mesh(trunkGeo, woodMat);
+            trunk.position.y = 2.4;
+            group.add(trunk);
+
+            for (let i = 0; i < 3; i++) {
+                const branchGeo = new THREE.CylinderGeometry(0.04, 0.11, 2.2, 4);
+                const branch = new THREE.Mesh(branchGeo, woodMat);
+                branch.position.y = 2.8 + i * 0.55;
+                branch.rotation.z = (Math.random() * 0.5 + 0.3) * (Math.random() > 0.5 ? 1 : -1);
+                branch.rotation.y = Math.random() * Math.PI;
+                group.add(branch);
+            }
+
+            group.position.set(x, getTerrainHeight(x, z), z);
+            scene.add(group);
+        }
+
+        function createPowerPole(x, z) {
+            const group = new THREE.Group();
+            const mat = new THREE.MeshStandardMaterial({ color: 0x1f1a14, roughness: 0.9 });
+            
+            const poleGeo = new THREE.CylinderGeometry(0.12, 0.2, 8.5, 4);
+            const pole = new THREE.Mesh(poleGeo, mat);
+            pole.position.y = 4.25;
+            group.add(pole);
+
+            const crossGeo = new THREE.BoxGeometry(2.4, 0.15, 0.15);
+            const cross = new THREE.Mesh(crossGeo, mat);
+            cross.position.y = 7.8;
+            group.add(cross);
+
+            group.position.set(x, getTerrainHeight(x, z), z);
+            group.rotation.z = (Math.random() - 0.5) * 0.18;
+            scene.add(group);
+        }
+
+        function createAbandonedBarn(x, z) {
+            const group = new THREE.Group();
+            const wallMat = new THREE.MeshStandardMaterial({ color: 0x421a1a, roughness: 0.9, flatShading: true });
+            const roofMat = new THREE.MeshStandardMaterial({ color: 0x242424, roughness: 0.95 });
+
+            const baseGeo = new THREE.BoxGeometry(10, 4.5, 7.5);
+            const base = new THREE.Mesh(baseGeo, wallMat);
+            base.position.y = 2.25;
+            group.add(base);
+
+            const roofGeo = new THREE.ConeGeometry(7, 3, 4);
+            const roof = new THREE.Mesh(roofGeo, roofMat);
+            roof.position.y = 5.25;
+            roof.rotation.y = Math.PI / 4;
+            group.add(roof);
+
+            group.position.set(x, getTerrainHeight(x, z), z);
+            group.rotation.y = Math.random() * Math.PI;
+            scene.add(group);
+        }
+
+        function createPlayer() {
+            const carGroup = new THREE.Group();
+
+            const bodyGeo = new THREE.BoxGeometry(2.2, 1.05, 4.2);
+            const bodyMat = new THREE.MeshStandardMaterial({
+                color: 0xff5500,
+                roughness: 0.45,
+                metalness: 0.8
+            });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.y = 0.75;
+            carGroup.add(body);
+
+            const cabinGeo = new THREE.BoxGeometry(1.65, 0.7, 2.3);
+            const cabinMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1d, roughness: 0.2, metalness: 0.95 });
+            const cabin = new THREE.Mesh(cabinGeo, cabinMat);
+            cabin.position.set(0, 1.35, -0.3);
+            carGroup.add(cabin);
+
+            const rackGeo = new THREE.BoxGeometry(1.0, 0.2, 1.6);
+            const rackMat = new THREE.MeshStandardMaterial({ color: 0x101010, metalness: 0.9 });
+            const rack = new THREE.Mesh(rackGeo, rackMat);
+            rack.position.set(0, 1.75, -0.3);
+            carGroup.add(rack);
+
+            const radarDishGeo = new THREE.ConeGeometry(0.5, 0.3, 8);
+            const radarDishMat = new THREE.MeshStandardMaterial({ color: 0x39ff14, wireframe: true });
+            const radarDish = new THREE.Mesh(radarDishGeo, radarDishMat);
+            radarDish.position.set(0, 1.95, -0.3);
+            radarDish.rotation.x = Math.PI / 2;
+            radarDish.name = "sensorRadar";
+            carGroup.add(radarDish);
+
+            const lightColor = 0xffffe0;
+            const headlightGeo = new THREE.BoxGeometry(0.25, 0.16, 0.08);
+            const headlightMat = new THREE.MeshStandardMaterial({ color: lightColor, emissive: lightColor });
+            
+            const leftLight = headlightMat.clone();
+            const leftLightMesh = new THREE.Mesh(headlightGeo, leftLight);
+            leftLightMesh.position.set(-0.8, 0.7, -2.1);
+            carGroup.add(leftLightMesh);
+
+            const rightLightMesh = leftLightMesh.clone();
+            rightLightMesh.position.set(0.8, 0.7, -2.1);
+            carGroup.add(rightLightMesh);
+
+            const wheelGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.52, 12);
+            wheelGeo.rotateZ(Math.PI / 2);
+            const wheelMat = new THREE.MeshStandardMaterial({ color: 0x121212, roughness: 0.95 });
+
+            const wheelPositions = [
+                { x: -1.15, y: 0.5, z: -1.35 },
+                { x: 1.15, y: 0.5, z: -1.35 },
+                { x: -1.15, y: 0.5, z: 1.35 },
+                { x: 1.15, y: 0.5, z: 1.35 }
+            ];
+
+            wheelPositions.forEach((pos, index) => {
+                const wMesh = new THREE.Mesh(wheelGeo, wheelMat);
+                wMesh.position.set(pos.x, pos.y, pos.z);
+                wMesh.name = `wheel_${index}`;
+                carGroup.add(wMesh);
+            });
+
+            const antennaGeo = new THREE.CylinderGeometry(0.015, 0.04, 1.9, 4);
+            const antenna = new THREE.Mesh(antennaGeo, rackMat);
+            antenna.position.set(-0.4, 2.4, 0.2);
+            antenna.rotation.x = -0.15;
+            antenna.name = "antenna";
+            carGroup.add(antenna);
+
+            const spotlight = new THREE.SpotLight(0xffffff, 4, 55, Math.PI / 5, 0.5, 1);
+            spotlight.position.set(0, 1.5, -1.8);
+            spotlight.target.position.set(0, 0, -32);
+            carGroup.add(spotlight);
+            carGroup.add(spotlight.target);
+
+            scene.add(carGroup);
+            playerCar.mesh = carGroup;
+        }
+
+        function spawnTornadoes(count) {
+            for (let i = 0; i < count; i++) {
+                const angle = (i / count) * Math.PI * 2;
+                const radius = 140 + Math.random() * 210;
+                const tx = Math.cos(angle) * radius;
+                const tz = Math.sin(angle) * radius;
+                tornadoes.push(createTornado(tx, tz));
+            }
+        }
+
+        function createTornado(x, z) {
+            const tornadoGroup = new THREE.Group();
+            
+            const rings = [];
+            const heightSegments = 18;
+            const ringMaterial = new THREE.MeshStandardMaterial({
+                color: 0x303742,
+                roughness: 1.0,
+                wireframe: true,
+                transparent: true,
+                opacity: 0.35
+            });
+
+            for (let h = 0; h < heightSegments; h++) {
+                const ratio = h / heightSegments;
+                const radius = 1.3 + Math.pow(ratio, 2) * 23; 
+                const thickness = 0.4 + ratio * 2;
+                
+                const ringGeo = new THREE.TorusGeometry(radius, thickness, 4, 12);
+                ringGeo.rotateX(Math.PI / 2);
+                
+                const ringMesh = new THREE.Mesh(ringGeo, ringMaterial);
+                ringMesh.position.y = h * 2.6;
+                tornadoGroup.add(ringMesh);
+                
+                rings.push({
+                    mesh: ringMesh,
+                    baseRadius: radius,
+                    rotSpeed: (Math.random() * 2.2 + 1) * (Math.random() > 0.5 ? 1 : -1),
+                    phase: Math.random() * Math.PI * 2
+                });
+            }
+
+            const coreGeo = new THREE.CylinderGeometry(14, 2.5, 45, 8, 1, true);
+            const coreMat = new THREE.MeshStandardMaterial({
+                color: 0x151820,
+                transparent: true,
+                opacity: 0.28,
+                flatShading: true,
+                side: THREE.DoubleSide
+            });
+            const core = new THREE.Mesh(coreGeo, coreMat);
+            core.position.y = 22.5;
+            tornadoGroup.add(core);
+
+            const stormLight = new THREE.PointLight(0x00f0ff, 0, 90);
+            stormLight.position.y = 4;
+            tornadoGroup.add(stormLight);
+
+            tornadoGroup.position.set(x, getTerrainHeight(x, z), z);
+            scene.add(tornadoGroup);
+
+            const fujitaNum = Math.floor(Math.random() * 4) + 2;
+
+            return {
+                mesh: tornadoGroup,
+                rings: rings,
+                light: stormLight,
+                x: x,
+                z: z,
+                vx: (Math.random() - 0.5) * 9,
+                vz: (Math.random() - 0.5) * 9,
+                fujita: `EF-${fujitaNum}`,
+                baseWobbleSpeed: Math.random() * 1.6 + 0.6,
+                timer: 0
+            };
+        }
+
+        function spawnAICars(count) {
+            const colors = [0x00a8ff, 0x39ff14, 0xfcfcfc, 0xc133ff, 0xffea00];
+            for (let i = 0; i < count; i++) {
+                const rx = (Math.random() - 0.5) * (WORLD_SIZE - 200);
+                const rz = (Math.random() - 0.5) * (WORLD_SIZE - 200);
+
+                const carGroup = new THREE.Group();
+                const bodyGeo = new THREE.BoxGeometry(2, 0.9, 3.6);
+                const bodyMat = new THREE.MeshStandardMaterial({
+                    color: colors[i % colors.length],
+                    roughness: 0.6,
+                    metalness: 0.5
+                });
+                const body = new THREE.Mesh(bodyGeo, bodyMat);
+                body.position.y = 0.6;
+                carGroup.add(body);
+
+                const probePackGeo = new THREE.BoxGeometry(0.85, 0.3, 1.0);
+                const probePackMat = new THREE.MeshStandardMaterial({ color: 0x1f1f1f });
+                const probePack = new THREE.Mesh(probePackGeo, probePackMat);
+                probePack.position.set(0, 1.1, 0.45);
+                probePack.name = "probePack";
+                carGroup.add(probePack);
+
+                const lightGeo = new THREE.CylinderGeometry(0.12, 0.12, 0.22, 8);
+                const lightMat = new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0xff0000 });
+                const emergencyLight = new THREE.Mesh(lightGeo, lightMat);
+                emergencyLight.position.set(0, 1.3, -0.4);
+                carGroup.add(emergencyLight);
+
+                const wheelGeo = new THREE.CylinderGeometry(0.45, 0.45, 0.48, 8);
+                wheelGeo.rotateZ(Math.PI / 2);
+                const wheelMat = new THREE.MeshStandardMaterial({ color: 0x111 });
+                const wheelCoords = [
+                    [-1.05, 0.45, -1.15], [1.05, 0.45, -1.15],
+                    [-1.05, 0.45, 1.15], [1.05, 0.45, 1.15]
+                ];
+                wheelCoords.forEach((coord) => {
+                    const w = new THREE.Mesh(wheelGeo, wheelMat);
+                    w.position.set(coord[0], coord[1], coord[2]);
+                    carGroup.add(w);
+                });
+
+                carGroup.position.set(rx, getTerrainHeight(rx, rz), rz);
+                scene.add(carGroup);
+
+                aiCars.push({
+                    mesh: carGroup,
+                    x: rx,
+                    z: rz,
+                    angle: Math.random() * Math.PI * 2,
+                    speed: 16 + Math.random() * 8,
+                    targetTornado: null,
+                    state: 'CHASING',
+                    actionTimer: Math.random() * 6,
+                    id: `CAZADOR-${Math.floor(Math.random() * 900) + 100}`,
+                    colorHex: `#${colors[i % colors.length].toString(16).padStart(6, '0')}`
+                });
+            }
+        }
+
+        function createDebrisSystem() {
+            const count = 380;
+            const geo = new THREE.BufferGeometry();
+            const positions = new Float32Array(count * 3);
+            const velocities = [];
+
+            for (let i = 0; i < count; i++) {
+                positions[i * 3] = (Math.random() - 0.5) * WORLD_SIZE;
+                positions[i * 3 + 1] = Math.random() * 35 + 0.5;
+                positions[i * 3 + 2] = (Math.random() - 0.5) * WORLD_SIZE;
+
+                velocities.push({
+                    x: (Math.random() - 0.5) * 8,
+                    y: (Math.random() - 0.5) * 1.5,
+                    z: (Math.random() - 0.5) * 8
+                });
+            }
+
+            geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            const mat = new THREE.PointsMaterial({
+                color: 0x7c8c9e,
+                size: 0.75,
+                transparent: true,
+                opacity: 0.7,
+                blending: THREE.AdditiveBlending
+            });
+
+            debrisParticles = new THREE.Points(geo, mat);
+            scene.add(debrisParticles);
+            debrisParticles.userData = { velocities: velocities };
+        }
+
+        function deployProbe(ownerName, x, z, isPlayer = false) {
+            const probeGroup = new THREE.Group();
+
+            const baseGeo = new THREE.CylinderGeometry(0.08, 0.32, 1.0, 8);
+            const baseMat = new THREE.MeshStandardMaterial({ color: isPlayer ? 0xffdf00 : 0x00c3ff, metalness: 0.95 });
+            const base = new THREE.Mesh(baseGeo, baseMat);
+            base.position.y = 0.5;
+            probeGroup.add(base);
+
+            const headGeo = new THREE.SphereGeometry(0.24, 8, 8);
+            const headMat = new THREE.MeshBasicMaterial({ color: isPlayer ? 0xffdf00 : 0x00c3ff });
+            const head = new THREE.Mesh(headGeo, headMat);
+            head.position.y = 1.0;
+            probeGroup.add(head);
+
+            const flareLight = new THREE.PointLight(isPlayer ? 0xffdf00 : 0x00c3ff, 4, 11);
+            flareLight.position.y = 1.0;
+            probeGroup.add(flareLight);
+
+            const realY = getTerrainHeight(x, z);
+            probeGroup.position.set(x, realY, z);
+            scene.add(probeGroup);
+
+            probeGroup.scale.set(0.1, 0.1, 0.1);
+
+            deployedProbes.push({
+                mesh: probeGroup,
+                light: flareLight,
+                x: x,
+                z: z,
+                isPlayer: isPlayer,
+                owner: ownerName,
+                timer: 0,
+                scale: 0.1,
+                active: true
+            });
+
+            if (isPlayer) {
+                playerCar.deployedProbes++;
+                probeCountText.innerText = playerCar.deployedProbes;
+                playBeep(920, 0.1, 'square');
+                setTimeout(() => playBeep(1250, 0.12, 'square'), 80);
+            } else {
+                playBeep(450, 0.08, 'sine');
+            }
+        }
+
+        function getTerrainHeight(x, z) {
+            return Math.sin(x * 0.01) * Math.cos(z * 0.01) * 3 + Math.sin(x * 0.003) * 6;
+        }
+
+        function updatePlayerCar(dt) {
+            if (!playerCar.mesh) return;
+
+            let accelInput = 0;
+            if (keys.w || touchControls.isGassing) accelInput = 1;
+            if (keys.s || touchControls.isBraking) accelInput = -1;
+
+            let steerInput = 0;
+            if (keys.a) steerInput = 1;
+            if (keys.d) steerInput = -1;
+            if (touchControls.steerX !== 0) steerInput = -touchControls.steerX;
+
+            if (accelInput !== 0) {
+                playerCar.speed += accelInput * playerCar.acceleration * dt;
+                const limit = accelInput > 0 ? playerCar.maxSpeed : -15;
+                if (accelInput > 0 && playerCar.speed > limit) playerCar.speed = limit;
+                if (accelInput < 0 && playerCar.speed < limit) playerCar.speed = limit;
+            } else {
+                if (playerCar.speed > 0) {
+                    playerCar.speed -= playerCar.friction * 1.8 * dt;
+                    if (playerCar.speed < 0) playerCar.speed = 0;
+                } else if (playerCar.speed < 0) {
+                    playerCar.speed += playerCar.friction * 1.8 * dt;
+                    if (playerCar.speed > 0) playerCar.speed = 0;
+                }
+            }
+
+            if (Math.abs(playerCar.speed) > 1) {
+                const dir = playerCar.speed > 0 ? 1 : -1;
+                playerCar.angle += steerInput * playerCar.steerSpeed * dir * dt;
+            }
+
+            playerCar.x += Math.sin(playerCar.angle) * playerCar.speed * dt;
+            playerCar.z += Math.cos(playerCar.angle) * playerCar.speed * dt;
+
+            const limitMap = WORLD_SIZE / 2 - 25;
+            playerCar.x = Math.max(-limitMap, Math.min(limitMap, playerCar.x));
+            playerCar.z = Math.max(-limitMap, Math.min(limitMap, playerCar.z));
+
+            const targetY = getTerrainHeight(playerCar.x, playerCar.z);
+            playerCar.mesh.position.set(playerCar.x, targetY, playerCar.z);
+            playerCar.mesh.rotation.y = playerCar.angle + Math.PI;
+
+            const tilt = steerInput * -0.06 * (playerCar.speed / playerCar.maxSpeed);
+            playerCar.mesh.rotation.z = tilt;
+
+            const sensorRadar = playerCar.mesh.getObjectByName("sensorRadar");
+            if (sensorRadar) {
+                sensorRadar.rotation.z += 4.5 * dt;
+            }
+            const antenna = playerCar.mesh.getObjectByName("antenna");
+            if (antenna) {
+                antenna.rotation.z = Math.sin(clock.getElapsedTime() * 14) * 0.06;
+            }
+
+            for (let i = 0; i < 4; i++) {
+                const wheel = playerCar.mesh.getObjectByName(`wheel_${i}`);
+                if (wheel) {
+                    wheel.rotation.x += (playerCar.speed * 0.18);
+                    if (i < 2) wheel.rotation.y = steerInput * 0.28;
+                }
+            }
+
+            const displayKmh = Math.floor(Math.abs(playerCar.speed) * 3);
+            speedDisplay.innerText = `${displayKmh} km/h`;
+        }
+
+        function updateAICars(dt) {
+            aiCars.forEach((car) => {
+                car.actionTimer -= dt;
+
+                if (!car.targetTornado || car.actionTimer <= 0) {
+                    let nearestTor = null;
+                    let minDist = Infinity;
+                    tornadoes.forEach(tor => {
+                        const d = dist(car.x, car.z, tor.x, tor.z);
+                        if (d < minDist) {
+                            minDist = d;
+                            nearestTor = tor;
+                        }
+                    });
+                    car.targetTornado = nearestTor;
+                    car.actionTimer = 4 + Math.random() * 4;
+                }
+
+                if (!car.targetTornado) return;
+
+                const distanceToTornado = dist(car.x, car.z, car.targetTornado.x, car.targetTornado.z);
+
+                if (car.state === 'CHASING') {
+                    const targetAngle = Math.atan2(car.targetTornado.x - car.x, car.targetTornado.z - car.z);
+                    let angleDiff = targetAngle - car.angle;
+                    angleDiff = Math.atan2(Math.sin(angleDiff), Math.cos(angleDiff));
+                    car.angle += angleDiff * 2.2 * dt;
+                    car.speed = 17;
+
+                    if (distanceToTornado < 55) {
+                        car.state = 'DEPLOYING';
+                        car.speed = 0;
+                        car.actionTimer = 1.8;
+                    }
+                } 
+                else if (car.state === 'DEPLOYING') {
+                    car.speed = 0;
+                    if (car.actionTimer <= 0) {
+                        deployProbe(car.id, car.x, car.z, false);
+                        car.state = 'FLEEING';
+                        car.actionTimer = 5.5;
+                    }
+                } 
+                else if (car.state === 'FLEEING') {
+                    const awayAngle = Math.atan2(car.x - car.targetTornado.x, car.z - car.targetTornado.z);
+                    let angleDiff = awayAngle - car.angle;
+                    angleDiff = Math.atan2(Math.sin(angleDiff), Math.cos(angleDiff));
+                    car.angle += angleDiff * 3.2 * dt;
+                    car.speed = 28;
+
+                    if (car.actionTimer <= 0 || distanceToTornado > 130) {
+                        car.state = 'CHASING';
+                    }
+                }
+
+                car.x += Math.sin(car.angle) * car.speed * dt;
+                car.z += Math.cos(car.angle) * car.speed * dt;
+
+                const targetY = getTerrainHeight(car.x, car.z);
+                car.mesh.position.set(car.x, targetY, car.z);
+                car.mesh.rotation.y = car.angle + Math.PI;
+            });
+        }
+
+        function updateTornadoes(dt) {
+            tornadoes.forEach((tor) => {
+                tor.timer += dt;
+                tor.x += tor.vx * dt;
+                tor.z += tor.vz * dt;
+
+                const limit = WORLD_SIZE / 2 - 70;
+                if (Math.abs(tor.x) > limit) { tor.vx *= -1; tor.x = Math.sign(tor.x) * limit; }
+                if (Math.abs(tor.z) > limit) { tor.vz *= -1; tor.z = Math.sign(tor.z) * limit; }
+
+                tor.mesh.position.set(tor.x, getTerrainHeight(tor.x, tor.z) - 1, tor.z);
+
+                tor.rings.forEach((ring) => {
+                    ring.mesh.rotation.y += ring.rotSpeed * dt;
+                    const wobble = Math.sin(tor.timer * tor.baseWobbleSpeed + ring.phase) * (ring.mesh.position.y * 0.08);
+                    ring.mesh.position.x = wobble;
+                    ring.mesh.position.z = Math.cos(tor.timer * 0.75 + ring.phase) * (ring.mesh.position.y * 0.05);
+                });
+
+                if (Math.random() < 0.015) {
+                    tor.light.intensity = 18;
+                } else {
+                    tor.light.intensity = THREE.MathUtils.lerp(tor.light.intensity, 0, 0.08);
+                }
+            });
+        }
+
+        function updateDebris(dt) {
+            if (!debrisParticles) return;
+
+            const posAttr = debrisParticles.geometry.attributes.position;
+            const count = posAttr.count;
+            const velocities = debrisParticles.userData.velocities;
+
+            for (let i = 0; i < count; i++) {
+                let px = posAttr.getX(i);
+                let py = posAttr.getY(i);
+                let pz = posAttr.getZ(i);
+                let vel = velocities[i];
+
+                let forceX = 0, forceY = 0, forceZ = 0;
+
+                tornadoes.forEach((tor) => {
+                    const dx = tor.x - px;
+                    const dz = tor.z - pz;
+                    const d = Math.sqrt(dx * dx + dz * dz) + 1.0;
+
+                    if (d < 110) {
+                        const pushForce = (110 - d) / d;
+                        forceX += (dx / d) * pushForce * 7.5 + (-dz / d) * pushForce * 13;
+                        forceZ += (dz / d) * pushForce * 7.5 + (dx / d) * pushForce * 13;
+                        forceY += pushForce * 3.8;
+                    }
+                });
+
+                px += (vel.x + forceX) * dt;
+                py += (vel.y + forceY) * dt;
+                pz += (vel.z + forceZ) * dt;
+
+                if (py > 55) {
+                    py = 0.5;
+                    px = playerCar.x + (Math.random() - 0.5) * 150;
+                    pz = playerCar.z + (Math.random() - 0.5) * 150;
+                }
+
+                if (Math.abs(px) > WORLD_SIZE / 2 || Math.abs(pz) > WORLD_SIZE / 2) {
+                    px = playerCar.x + (Math.random() - 0.5) * 150;
+                    pz = playerCar.z + (Math.random() - 0.5) * 150;
+                    py = Math.random() * 25 + 0.5;
+                }
+
+                posAttr.setXYZ(i, px, py, pz);
+            }
+
+            posAttr.needsUpdate = true;
+        }
+
+        function updateProbes(dt) {
+            let activeProbesCount = 0;
+
+            deployedProbes.forEach((probe) => {
+                if (!probe.active) return;
+                probe.timer += dt;
+
+                const pulse = Math.abs(Math.sin(probe.timer * 5.5));
+                probe.light.intensity = pulse * 5;
+
+                if (probe.scale < 1.0) {
+                    probe.scale += 3.2 * dt;
+                    if (probe.scale > 1.0) probe.scale = 1.0;
+                    probe.mesh.scale.set(probe.scale, probe.scale, probe.scale);
+                }
+
+                let closestTorDist = Infinity;
+                tornadoes.forEach((tor) => {
+                    const d = dist(probe.x, probe.z, tor.x, tor.z);
+                    if (d < closestTorDist) closestTorDist = d;
+                });
+
+                if (closestTorDist < 85) {
+                    activeProbesCount++;
+                    if (probe.isPlayer) {
+                        const dataGain = Math.floor((85 - closestTorDist) * 0.16);
+                        if (dataGain > 0) {
+                            playerCar.dataScore += dataGain;
+                            dataScoreText.innerText = `${playerCar.dataScore} GB`;
+                        }
+                    }
+                }
+
+                if (closestTorDist < 8) {
+                    probe.active = false;
+                    scene.remove(probe.mesh);
+                    if (probe.isPlayer) {
+                        playBeep(180, 0.45, 'sawtooth');
+                    }
+                }
+            });
+
+            deployedProbes = deployedProbes.filter(p => p.active);
+        }
+
+        function checkHazardsAndStorm(dt) {
+            let isNearTornado = false;
+            let minDistance = Infinity;
+            let activeTornado = null;
+
+            tornadoes.forEach((tor) => {
+                const d = dist(playerCar.x, playerCar.z, tor.x, tor.z);
+                if (d < minDistance) {
+                    minDistance = d;
+                    activeTornado = tor;
+                }
+            });
+
+            if (minDistance < 90) {
+                isNearTornado = true;
+                proximityAlert.classList.remove('hidden');
+
+                const staticOpacity = Math.max(0, (90 - minDistance) / 90) * 0.65;
+                staticEffect.style.opacity = staticOpacity;
+
+                const calculatedWind = Math.floor((110 - minDistance) * 3.4 + 20);
+                windSpeedText.innerText = `${calculatedWind} km/h`;
+                windBar.style.width = `${Math.min(100, (calculatedWind / 400) * 100)}%`;
+                
+                let scale = "EF-0";
+                if (calculatedWind > 310) scale = "EF-5";
+                else if (calculatedWind > 250) scale = "EF-4";
+                else if (calculatedWind > 190) scale = "EF-3";
+                else if (calculatedWind > 130) scale = "EF-2";
+                else if (calculatedWind > 100) scale = "EF-1";
+                
+                fujitaScale.innerText = scale;
+
+                const baroValue = Math.floor(1013 - (90 - minDistance) * 1.5);
+                baroPress.innerText = `${baroValue} hPa`;
+                baroBar.style.width = `${Math.max(10, (baroValue / 1020) * 100)}%`;
+                rfdStatusText.innerText = "ALERTA RFD";
+                rfdStatusText.className = "text-red-400 font-black animate-pulse";
+
+                const forceMagnitude = (90 - minDistance) * 0.16;
+                const suctionAngle = Math.atan2(activeTornado.x - playerCar.x, activeTornado.z - playerCar.z);
+                
+                playerCar.x += Math.sin(suctionAngle) * forceMagnitude * dt;
+                playerCar.z += Math.cos(suctionAngle) * forceMagnitude * dt;
+
+                playerCar.mesh.position.x += (Math.random() - 0.5) * (forceMagnitude * 0.12);
+                playerCar.mesh.position.z += (Math.random() - 0.5) * (forceMagnitude * 0.12);
+
+                if (minDistance < 32) {
+                    const damage = (32 - minDistance) * 0.75 * dt;
+                    playerCar.health -= damage;
+                    
+                    camera.position.x += (Math.random() - 0.5) * 0.6;
+                    camera.position.y += (Math.random() - 0.5) * 0.6;
+
+                    if (Math.random() < 0.2) {
+                        playBeep(140, 0.05, 'triangle');
+                    }
+
+                    updateHealthUI();
+                }
+            } else {
+                proximityAlert.classList.add('hidden');
+                staticEffect.style.opacity = 0;
+
+                windSpeedText.innerText = "22 km/h";
+                windBar.style.width = "12%";
+                fujitaScale.innerText = "EF-0";
+                baroPress.innerText = "1013 hPa";
+                baroBar.style.width = "82%";
+                rfdStatusText.innerText = "ESTABLE";
+                rfdStatusText.className = "text-emerald-300 font-bold";
+            }
+
+            lightningFlashTime -= dt;
+            if (lightningFlashTime <= 0) {
+                if (Math.random() < 0.006) {
+                    lightningFlashTime = Math.random() * 0.35 + 0.1;
+                    mainLight.intensity = 3.6;
+                    scene.background = new THREE.Color(0x2d3242);
+                    playBeep(55, 0.5, 'sawtooth');
+                } else {
+                    mainLight.intensity = 0.2;
+                    scene.background = new THREE.Color(0x06080b);
+                }
+            } else {
+                mainLight.intensity = THREE.MathUtils.lerp(mainLight.intensity, 0.2, 0.12);
+            }
+
+            if (playerCar.health <= 0) {
+                triggerGameOver();
+            }
+        }
+
+        function updateHealthUI() {
+            const hp = Math.max(0, Math.floor(playerCar.health));
+            healthPercentage.innerText = `${hp}%`;
+            healthBar.style.width = `${hp}%`;
+
+            if (hp < 30) {
+                healthBar.className = "bg-red-600 h-full w-full hud-bar animate-pulse";
+            } else if (hp < 60) {
+                healthBar.className = "bg-yellow-500 h-full w-full hud-bar";
+            } else {
+                healthBar.className = "bg-gradient-to-r from-red-600 via-yellow-500 to-emerald-400 h-full w-full hud-bar";
+            }
+        }
+
+        function triggerGameOver() {
+            gameActive = false;
+            gameOverScreen.classList.remove('hidden');
+
+            document.getElementById('finalSondas').innerText = playerCar.deployedProbes;
+            document.getElementById('finalDatos').innerText = `${playerCar.dataScore} GB`;
+            
+            const alliesProbes = deployedProbes.filter(p => !p.isPlayer).length;
+            document.getElementById('finalAliadas').innerText = alliesProbes;
+
+            playBeep(110, 0.85, 'sawtooth');
+        }
+
+        function setupCameraDragListeners() {
+            const handleStart = (clientX, clientY) => {
+                if (menuScreen.classList.contains('hidden') && gameOverScreen.classList.contains('hidden')) {
+                    isPointerDragging = true;
+                    prevPointerPosition.x = clientX;
+                    prevPointerPosition.y = clientY;
+                    cameraOrbit.userActive = true;
+                    cameraOrbit.resetTimer = 0;
+                }
+            };
+
+            const handleMove = (clientX, clientY) => {
+                if (!isPointerDragging) return;
+
+                const deltaX = clientX - prevPointerPosition.x;
+                const deltaY = clientY - prevPointerPosition.y;
+
+                cameraOrbit.theta -= deltaX * 0.007;
+                cameraOrbit.phi += deltaY * 0.005;
+                cameraOrbit.phi = Math.max(0.12, Math.min(1.1, cameraOrbit.phi));
+
+                prevPointerPosition.x = clientX;
+                prevPointerPosition.y = clientY;
+                cameraOrbit.resetTimer = 0;
+            };
+
+            const handleEnd = () => {
+                isPointerDragging = false;
+            };
+
+            window.addEventListener('mousedown', (e) => {
+                if (e.target.tagName !== 'BUTTON' && e.target.id !== 'joystickKnob') {
+                    handleStart(e.clientX, e.clientY);
+                }
+            });
+
+            window.addEventListener('mousemove', (e) => {
+                handleMove(e.clientX, e.clientY);
+            });
+
+            window.addEventListener('mouseup', handleEnd);
+
+            window.addEventListener('touchstart', (e) => {
+                const touch = e.touches[0];
+                if (touch.clientX > window.innerWidth * 0.35 && e.target.tagName !== 'BUTTON' && e.target.id !== 'joystickKnob') {
+                    handleStart(touch.clientX, touch.clientY);
+                }
+            }, { passive: true });
+
+            window.addEventListener('touchmove', (e) => {
+                const touch = e.touches[0];
+                handleMove(touch.clientX, touch.clientY);
+            }, { passive: true });
+
+            window.addEventListener('touchend', handleEnd);
+        }
+
+        function updateCameraOrbit(dt) {
+            if (!playerCar.mesh) return;
+
+            if (cameraOrbit.userActive) {
+                cameraOrbit.resetTimer += dt;
+                const isDriving = Math.abs(playerCar.speed) > 5;
+                if (cameraOrbit.resetTimer > 2.0 && isDriving) {
+                    cameraOrbit.userActive = false;
+                }
+            }
+
+            if (!cameraOrbit.userActive) {
+                const targetAngle = playerCar.angle + Math.PI;
+                let diff = targetAngle - cameraOrbit.theta;
+                diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+                cameraOrbit.theta += diff * 4.0 * dt;
+                cameraOrbit.phi = THREE.MathUtils.lerp(cameraOrbit.phi, 0.35, 3.0 * dt);
+            }
+
+            const posX = playerCar.x + cameraOrbit.radius * Math.sin(cameraOrbit.theta) * Math.cos(cameraOrbit.phi);
+            const posZ = playerCar.z + cameraOrbit.radius * Math.cos(cameraOrbit.theta) * Math.cos(cameraOrbit.phi);
+            const posY = getTerrainHeight(playerCar.x, playerCar.z) + cameraOrbit.radius * Math.sin(cameraOrbit.phi);
+
+            camera.position.set(posX, posY, posZ);
+            camera.lookAt(playerCar.mesh.position.x, playerCar.mesh.position.y + 1.1, playerCar.mesh.position.z);
+
+            if (cameraConeIndicator) {
+                const relAngle = cameraOrbit.theta - playerCar.angle;
+                cameraConeIndicator.style.transform = `rotate(${relAngle}rad)`;
+            }
+        }
+
+        // DIBUJAR RADAR COMPACTO
+        function drawRadar() {
+            const w = radarCanvas.width;
+            const h = radarCanvas.height;
+            const cx = w / 2;
+            const cy = h / 2;
+
+            radarCtx.fillStyle = 'rgba(10, 20, 15, 0.7)';
+            radarCtx.fillRect(0, 0, w, h);
+
+            radarCtx.strokeStyle = 'rgba(57, 255, 20, 0.15)';
+            radarCtx.lineWidth = 1;
+            
+            for (let r = 14; r <= 56; r += 14) {
+                radarCtx.beginPath();
+                radarCtx.arc(cx, cy, r, 0, Math.PI * 2);
+                radarCtx.stroke();
+            }
+
+            radarCtx.beginPath();
+            radarCtx.moveTo(cx - 55, cy); radarCtx.lineTo(cx + 55, cy);
+            radarCtx.moveTo(cx, cy - 32); radarCtx.lineTo(cx, cy + 32);
+            radarCtx.stroke();
+
+            const sweepAngle = clock.getElapsedTime() * 3.2;
+            const rx = cx + Math.cos(sweepAngle) * 55;
+            const ry = cy + Math.sin(sweepAngle) * 55;
+
+            radarCtx.strokeStyle = 'rgba(57, 255, 20, 0.45)';
+            radarCtx.lineWidth = 1;
+            radarCtx.beginPath();
+            radarCtx.moveTo(cx, cy);
+            radarCtx.lineTo(rx, ry);
+            radarCtx.stroke();
+
+            const radarScale = 0.45;
+
+            tornadoes.forEach((tor) => {
+                const dx = tor.x - playerCar.x;
+                const dz = tor.z - playerCar.z;
+                
+                const rotX = dx * Math.cos(-playerCar.angle) - dz * Math.sin(-playerCar.angle);
+                const rotY = dx * Math.sin(-playerCar.angle) + dz * Math.cos(-playerCar.angle);
+
+                const px = cx + rotX * radarScale;
+                const py = cy - rotY * radarScale;
+
+                if (dist(cx, cy, px, py) < 55) {
+                    const pulse = Math.abs(Math.sin(clock.getElapsedTime() * 6));
+                    
+                    radarCtx.fillStyle = `rgba(239, 68, 68, ${0.4 + pulse * 0.6})`;
+                    radarCtx.beginPath();
+                    radarCtx.arc(px, py, 4.5, 0, Math.PI * 2);
+                    radarCtx.fill();
+
+                    radarCtx.strokeStyle = '#ef4444';
+                    radarCtx.lineWidth = 0.8;
+                    radarCtx.beginPath();
+                    radarCtx.arc(px, py, 7.5 * pulse, 0, Math.PI * 2);
+                    radarCtx.stroke();
+
+                    radarCtx.fillStyle = '#ff4444';
+                    radarCtx.font = 'bold 7px Courier New';
+                    radarCtx.fillText(tor.fujita, px + 5, py + 2);
+                }
+            });
+
+            aiCars.forEach((car) => {
+                const dx = car.x - playerCar.x;
+                const dz = car.z - playerCar.z;
+                const rotX = dx * Math.cos(-playerCar.angle) - dz * Math.sin(-playerCar.angle);
+                const rotY = dx * Math.sin(-playerCar.angle) + dz * Math.cos(-playerCar.angle);
+
+                const px = cx + rotX * radarScale;
+                const py = cy - rotY * radarScale;
+
+                if (dist(cx, cy, px, py) < 55) {
+                    radarCtx.fillStyle = '#00ccff';
+                    radarCtx.beginPath();
+                    radarCtx.arc(px, py, 2, 0, Math.PI * 2);
+                    radarCtx.fill();
+                }
+            });
+
+            deployedProbes.forEach((probe) => {
+                const dx = probe.x - playerCar.x;
+                const dz = probe.z - playerCar.z;
+                const rotX = dx * Math.cos(-playerCar.angle) - dz * Math.sin(-playerCar.angle);
+                const rotY = dx * Math.sin(-playerCar.angle) + dz * Math.cos(-playerCar.angle);
+
+                const px = cx + rotX * radarScale;
+                const py = cy - rotY * radarScale;
+
+                if (dist(cx, cy, px, py) < 55) {
+                    radarCtx.fillStyle = probe.isPlayer ? '#ffea00' : '#10ffaa';
+                    radarCtx.beginPath();
+                    radarCtx.arc(px, py, 1.5, 0, Math.PI * 2);
+                    radarCtx.fill();
+                }
+            });
+        }
+
+        function setupInputListeners() {
+            window.addEventListener('keydown', (e) => {
+                const k = e.key.toLowerCase();
+                if (k === 'w' || e.key === 'ArrowUp') keys.w = true;
+                if (k === 's' || e.key === 'ArrowDown') keys.s = true;
+                if (k === 'a' || e.key === 'ArrowLeft') keys.a = true;
+                if (k === 'd' || e.key === 'ArrowRight') keys.d = true;
+                
+                if (e.key === ' ' || k === 'spacebar') {
+                    if (gameActive) deployPlayerProbe();
+                }
+            });
+
+            window.addEventListener('keyup', (e) => {
+                const k = e.key.toLowerCase();
+                if (k === 'w' || e.key === 'ArrowUp') keys.w = false;
+                if (k === 's' || e.key === 'ArrowDown') keys.s = false;
+                if (k === 'a' || e.key === 'ArrowLeft') keys.a = false;
+                if (k === 'd' || e.key === 'ArrowRight') keys.d = false;
+            });
+
+            deployProbeBtn.addEventListener('click', () => {
+                if (gameActive) deployPlayerProbe();
+            });
+
+            // JOYSTICK MÓVIL COMPACTO
+            const joystickZone = document.getElementById('joystickZone');
+            const joystickKnob = document.getElementById('joystickKnob');
+            let joystickActive = false;
+
+            function handleJoystick(clientX, clientY) {
+                if (!joystickActive) return;
+                const rect = joystickZone.getBoundingClientRect();
+                const centerX = rect.left + rect.width / 2;
+                const centerY = rect.top + rect.height / 2;
+
+                let dx = clientX - centerX;
+                let dy = clientY - centerY;
+
+                const maxDistance = rect.width / 2 - 10;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                if (distance > maxDistance) {
+                    dx = (dx / distance) * maxDistance;
+                    dy = (dy / distance) * maxDistance;
+                }
+
+                joystickKnob.style.transform = `translate(${dx}px, ${dy}px)`;
+                touchControls.steerX = dx / maxDistance;
+            }
+
+            joystickZone.addEventListener('touchstart', (e) => {
+                joystickActive = true;
+                const touch = e.touches[0];
+                handleJoystick(touch.clientX, touch.clientY);
+            });
+
+            window.addEventListener('touchmove', (e) => {
+                if (joystickActive) {
+                    const touch = e.touches[0];
+                    handleJoystick(touch.clientX, touch.clientY);
+                }
+            }, { passive: true });
+
+            window.addEventListener('touchend', () => {
+                if (joystickActive) {
+                    joystickActive = false;
+                    joystickKnob.style.transform = 'translate(0px, 0px)';
+                    touchControls.steerX = 0;
+                }
+            });
+
+            const btnGas = document.getElementById('btnGas');
+            const btnBrake = document.getElementById('btnBrake');
+
+            btnGas.addEventListener('touchstart', (e) => { e.preventDefault(); touchControls.isGassing = true; });
+            btnGas.addEventListener('touchend', () => { touchControls.isGassing = false; });
+
+            btnBrake.addEventListener('touchstart', (e) => { e.preventDefault(); touchControls.isBraking = true; });
+            btnBrake.addEventListener('touchend', () => { touchControls.isBraking = false; });
+        }
+
+        function deployPlayerProbe() {
+            const offsetDist = -3.2;
+            const px = playerCar.x + Math.sin(playerCar.angle) * offsetDist;
+            const pz = playerCar.z + Math.cos(playerCar.angle) * offsetDist;
+            deployProbe("JUGADOR", px, pz, true);
+        }
+
+        function dist(x1, y1, x2, y2) {
+            return Math.sqrt((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1));
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        startBtn.addEventListener('click', () => {
+            menuScreen.classList.add('hidden');
+            gameActive = true;
+            playBeep(440, 0.15);
+            setTimeout(() => playBeep(554, 0.15), 120);
+            setTimeout(() => playBeep(659, 0.25), 240);
+        });
+
+        restartBtn.addEventListener('click', () => {
+            playerCar.health = 100;
+            playerCar.deployedProbes = 0;
+            playerCar.dataScore = 0;
+            playerCar.speed = 0;
+            playerCar.x = 0;
+            playerCar.z = 0;
+            playerCar.angle = 0;
+
+            cameraOrbit.theta = 0;
+            cameraOrbit.phi = 0.35;
+            cameraOrbit.userActive = false;
+
+            deployedProbes.forEach(p => scene.remove(p.mesh));
+            deployedProbes = [];
+
+            dataScoreText.innerText = "0 GB";
+            probeCountText.innerText = "0";
+            updateHealthUI();
+
+            tornadoes.forEach(tor => {
+                const angle = Math.random() * Math.PI * 2;
+                const radius = 130 + Math.random() * 200;
+                tor.x = Math.cos(angle) * radius;
+                tor.z = Math.sin(angle) * radius;
+                tor.mesh.position.set(tor.x, getTerrainHeight(tor.x, tor.z), tor.z);
+            });
+
+            aiCars.forEach(car => {
+                car.x = (Math.random() - 0.5) * (WORLD_SIZE - 200);
+                car.z = (Math.random() - 0.5) * (WORLD_SIZE - 200);
+                car.mesh.position.set(car.x, getTerrainHeight(car.x, car.z), car.z);
+                car.state = 'CHASING';
+            });
+
+            gameOverScreen.classList.add('hidden');
+            gameActive = true;
+
+            playBeep(523, 0.1);
+            setTimeout(() => playBeep(659, 0.12), 80);
+        });
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const dt = Math.min(clock.getDelta(), 0.1);
+
+            if (gameActive) {
+                updatePlayerCar(dt);
+                updateAICars(dt);
+                updateTornadoes(dt);
+                updateDebris(dt);
+                updateProbes(dt);
+                
+                checkHazardsAndStorm(dt);
+                updateCameraOrbit(dt);
+                drawRadar();
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        window.onload = function() {
+            init();
+        }
+    </script>
+</body>
+</html>
+
+```
+
